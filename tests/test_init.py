@@ -37,14 +37,21 @@ async def test_setup_entry(
     enable_custom_integrations: None,
 ) -> None:
     """Test successful setup of a config entry."""
-    with patch(
-        "custom_components.eloverblik_custom.EloverblikApiClient",
-        return_value=mock_eloverblik_api,
+    with (
+        patch(
+            "custom_components.eloverblik_custom.EloverblikApiClient",
+            return_value=mock_eloverblik_api,
+        ),
+        patch(
+            "custom_components.eloverblik_custom.async_setup_frontend",
+            new=AsyncMock(),
+        ) as mock_setup_frontend,
     ):
         await hass.config_entries.async_setup(mock_config_entry.entry_id)
         await hass.async_block_till_done()
 
     assert mock_config_entry.state is ConfigEntryState.LOADED
+    mock_setup_frontend.assert_awaited_once_with(hass)
     assert (
         hass.states.get(
             "sensor.eloverblik_571313174200000000_latest_hourly_consumption"
@@ -66,9 +73,15 @@ async def test_unload_entry(
     enable_custom_integrations: None,
 ) -> None:
     """Test unloading a config entry."""
-    with patch(
-        "custom_components.eloverblik_custom.EloverblikApiClient",
-        return_value=mock_eloverblik_api,
+    with (
+        patch(
+            "custom_components.eloverblik_custom.EloverblikApiClient",
+            return_value=mock_eloverblik_api,
+        ),
+        patch(
+            "custom_components.eloverblik_custom.async_setup_frontend",
+            new=AsyncMock(),
+        ),
     ):
         await hass.config_entries.async_setup(mock_config_entry.entry_id)
         await hass.async_block_till_done()

@@ -12,6 +12,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .api import EloverblikApiClient
 from .const import CONF_METERING_POINT, CONF_REFRESH_TOKEN
 from .coordinator import EloverblikDataUpdateCoordinator
+from .frontend import async_setup_frontend
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
@@ -28,6 +29,8 @@ class EloverblikData:
 
 async def async_setup_entry(hass: HomeAssistant, entry: EloverblikConfigEntry) -> bool:
     """Set up Eloverblik Custom from a config entry."""
+    await async_setup_frontend(hass)
+
     session = async_get_clientsession(hass)
     client = EloverblikApiClient(
         session=session,

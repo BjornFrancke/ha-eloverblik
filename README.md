@@ -9,6 +9,7 @@ from Eloverblik / Energinet.
 - Uses your Eloverblik refresh token and metering point ID
 - Fetches hourly consumption data from the Eloverblik API
 - Exposes a sensor for the latest hourly consumption reading
+- Ships a bundled Lovelace card for inspecting API-timestamped hourly points
 - Preserves the fetched hourly points with start/end timestamps
 - Imports hourly consumption into Home Assistant statistics for native history use
 - Supports reauthentication when your refresh token changes
@@ -73,6 +74,38 @@ readings with `api_start_utc`, `api_end_utc`, `start`, `end`, and `kwh`
 fields. The integration also imports those hourly points into Home Assistant
 statistics using a stable external statistics ID so they can be graphed and
 reused natively by Home Assistant.
+
+## Dashboard Card
+
+This integration ships with a bundled Lovelace custom card that plots hourly
+consumption using `hourly_data[*].api_start_utc` on the x-axis. This is the
+recommended UI for inspecting API-timestamped points because the stock Home
+Assistant entity popup graph still reflects recorder/history semantics.
+
+In most storage-mode Lovelace setups the card resource is registered
+automatically. If Home Assistant does not pick it up automatically, add the
+resource manually:
+
+```yaml
+url: /eloverblik_custom/eloverblik-hourly-card.js
+type: module
+```
+
+Then add the card to a dashboard:
+
+```yaml
+type: custom:eloverblik-hourly-card
+entity: sensor.eloverblik_571313174200000000_latest_hourly_consumption
+title: Eloverblik Hourly API Data
+hours_to_show: 24
+```
+
+Card behavior:
+
+- Reads the `hourly_data` attribute from `Latest hourly consumption`
+- Uses `api_start_utc` as the plotted timestamp for each point
+- Shows API and local start/end timestamps in the hover tooltip
+- Defaults to the latest 24 hourly points, configurable with `hours_to_show`
 
 ## Development
 
