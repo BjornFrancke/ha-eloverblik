@@ -24,6 +24,8 @@ def test_sensor_exposes_consumption_state_and_attributes() -> None:
         _build_coordinator(
             {
                 "latest_hour": {
+                    "api_start_utc": "2024-01-01T23:00:00Z",
+                    "api_end_utc": "2024-01-02T00:00:00Z",
                     "start": "2024-01-02T00:00:00+01:00",
                     "end": "2024-01-02T01:00:00+01:00",
                     "kwh": 0.5,
@@ -32,6 +34,8 @@ def test_sensor_exposes_consumption_state_and_attributes() -> None:
                 "window_total_kwh": 2.0,
                 "hourly": [
                     {
+                        "api_start_utc": "2024-01-01T23:00:00Z",
+                        "api_end_utc": "2024-01-02T00:00:00Z",
                         "start": "2024-01-02T00:00:00+01:00",
                         "end": "2024-01-02T01:00:00+01:00",
                         "kwh": 0.5,
@@ -47,11 +51,15 @@ def test_sensor_exposes_consumption_state_and_attributes() -> None:
     assert sensor.state_class is SensorStateClass.MEASUREMENT
     assert sensor.extra_state_attributes == {
         "metering_point": "571313174200318497",
+        "latest_hour_api_start_utc": "2024-01-01T23:00:00Z",
+        "latest_hour_api_end_utc": "2024-01-02T00:00:00Z",
         "latest_hour_start": "2024-01-02T00:00:00+01:00",
         "latest_hour_end": "2024-01-02T01:00:00+01:00",
         "window_total_kwh": 2.0,
         "hourly_data": [
             {
+                "api_start_utc": "2024-01-01T23:00:00Z",
+                "api_end_utc": "2024-01-02T00:00:00Z",
                 "start": "2024-01-02T00:00:00+01:00",
                 "end": "2024-01-02T01:00:00+01:00",
                 "kwh": 0.5,
@@ -86,6 +94,8 @@ def test_sensor_keeps_empty_hourly_breakdown() -> None:
 
     assert sensor.extra_state_attributes == {
         "metering_point": "571313174200318497",
+        "latest_hour_api_start_utc": None,
+        "latest_hour_api_end_utc": None,
         "latest_hour_start": None,
         "latest_hour_end": None,
         "window_total_kwh": 0.0,

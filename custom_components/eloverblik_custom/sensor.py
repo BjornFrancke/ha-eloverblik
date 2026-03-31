@@ -80,6 +80,12 @@ class EloverblikEnergySensor(
         daily = self.coordinator.data.get("daily", {})
         return {
             "metering_point": self._metering_point,
+            "latest_hour_api_start_utc": (
+                latest_hour["api_start_utc"] if latest_hour else None
+            ),
+            "latest_hour_api_end_utc": (
+                latest_hour["api_end_utc"] if latest_hour else None
+            ),
             "latest_hour_start": latest_hour["start"] if latest_hour else None,
             "latest_hour_end": latest_hour["end"] if latest_hour else None,
             "window_total_kwh": self.coordinator.data.get("window_total_kwh"),

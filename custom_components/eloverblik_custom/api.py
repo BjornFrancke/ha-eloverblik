@@ -315,12 +315,16 @@ class EloverblikApiClient:
                 offset = int(point["position"]) - 1
                 point_start = start_time + timedelta(hours=offset)
                 point_end = point_start + timedelta(hours=1)
+                api_start = point_start.astimezone(UTC)
+                api_end = point_end.astimezone(UTC)
                 time_slot = point_start.astimezone(LOCAL_TIME_ZONE)
                 end_slot = point_end.astimezone(LOCAL_TIME_ZONE)
                 quantity = float(point["out_Quantity.quantity"])
                 day_total += quantity
                 hourly.append(
                     {
+                        "api_start_utc": api_start.isoformat().replace("+00:00", "Z"),
+                        "api_end_utc": api_end.isoformat().replace("+00:00", "Z"),
                         "start": time_slot.isoformat(),
                         "end": end_slot.isoformat(),
                         "kwh": quantity,

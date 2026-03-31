@@ -17,16 +17,22 @@ def test_parse_time_series_multi_period() -> None:
     assert result["window_total_kwh"] == 2.0
     assert len(result["hourly"]) == 5
     assert result["hourly"][0] == {
+        "api_start_utc": "2024-01-01T23:00:00Z",
+        "api_end_utc": "2024-01-02T00:00:00Z",
         "start": "2024-01-02T00:00:00+01:00",
         "end": "2024-01-02T01:00:00+01:00",
         "kwh": 0.5,
     }
     assert result["hourly"][3] == {
+        "api_start_utc": "2024-01-02T23:00:00Z",
+        "api_end_utc": "2024-01-03T00:00:00Z",
         "start": "2024-01-03T00:00:00+01:00",
         "end": "2024-01-03T01:00:00+01:00",
         "kwh": 0.4,
     }
     assert result["latest_hour"] == {
+        "api_start_utc": "2024-01-03T00:00:00Z",
+        "api_end_utc": "2024-01-03T01:00:00Z",
         "start": "2024-01-03T01:00:00+01:00",
         "end": "2024-01-03T02:00:00+01:00",
         "kwh": 0.6,
@@ -120,7 +126,11 @@ def test_parse_time_series_single_period() -> None:
     assert result["latest_hour_kwh"] == 2.5
     assert result["window_total_kwh"] == 4.0
     assert len(result["hourly"]) == 2
+    assert result["hourly"][0]["api_start_utc"] == "2024-03-14T23:00:00Z"
+    assert result["hourly"][0]["api_end_utc"] == "2024-03-15T00:00:00Z"
     assert result["hourly"][0]["start"] == "2024-03-15T00:00:00+01:00"
+    assert result["hourly"][1]["api_start_utc"] == "2024-03-15T00:00:00Z"
+    assert result["hourly"][1]["api_end_utc"] == "2024-03-15T01:00:00Z"
     assert result["hourly"][1]["end"] == "2024-03-15T02:00:00+01:00"
     assert result["daily"] == {"2024-03-15": 4.0}
 
@@ -213,16 +223,22 @@ def test_parse_time_series_dst_day() -> None:
     assert result["daily"] == {"2026-03-29": 0.6}
     assert result["hourly"] == [
         {
+            "api_start_utc": "2026-03-28T23:00:00Z",
+            "api_end_utc": "2026-03-29T00:00:00Z",
             "start": "2026-03-29T00:00:00+01:00",
             "end": "2026-03-29T01:00:00+01:00",
             "kwh": 0.1,
         },
         {
+            "api_start_utc": "2026-03-29T00:00:00Z",
+            "api_end_utc": "2026-03-29T01:00:00Z",
             "start": "2026-03-29T01:00:00+01:00",
             "end": "2026-03-29T03:00:00+02:00",
             "kwh": 0.2,
         },
         {
+            "api_start_utc": "2026-03-29T01:00:00Z",
+            "api_end_utc": "2026-03-29T02:00:00Z",
             "start": "2026-03-29T03:00:00+02:00",
             "end": "2026-03-29T04:00:00+02:00",
             "kwh": 0.3,
