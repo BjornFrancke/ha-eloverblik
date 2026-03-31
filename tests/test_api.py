@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from zoneinfo import ZoneInfo
+
 import pytest
 
 from custom_components.eloverblik_custom.api import EloverblikApiClient, EloverblikError
@@ -244,6 +246,22 @@ def test_parse_time_series_dst_day() -> None:
             "kwh": 0.3,
         },
     ]
+
+
+def test_parse_time_series_uses_configured_local_timezone() -> None:
+    """Test local start/end follow the provided Home Assistant timezone."""
+    result = EloverblikApiClient._parse_time_series(
+        MOCK_TIME_SERIES_RESPONSE,
+        local_time_zone=ZoneInfo("UTC"),
+    )
+
+    assert result["hourly"][0]["api_start_utc"] == "2024-01-01T23:00:00Z"
+    assert result["hourly"][0]["start"] == "2024-01-01T23:00:00+00:00"
+    assert result["hourly"][0]["end"] == "2024-01-02T00:00:00+00:00"
+    assert result["daily"] == {
+        "2024-01-01": 1.0,
+        "2024-01-02": 1.0,
+    }
 
 
 def test_parse_time_series_raises_on_api_error() -> None:

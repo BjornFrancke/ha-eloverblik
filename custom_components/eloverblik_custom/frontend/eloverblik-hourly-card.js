@@ -532,11 +532,11 @@ class EloverblikHourlyCard extends HTMLElement {
 
   _formatAxisLabel(localStartMs, apiStartMs) {
     const date = Number.isFinite(localStartMs) ? localStartMs : apiStartMs;
-    return new Intl.DateTimeFormat(undefined, {
+    return this._formatWithTimeZone(date, {
       month: "short",
       day: "numeric",
       hour: "numeric",
-    }).format(date);
+    });
   }
 
   _formatLocalDateTime(localMs, fallbackMs) {
@@ -545,12 +545,22 @@ class EloverblikHourlyCard extends HTMLElement {
       return "n/a";
     }
 
-    return new Intl.DateTimeFormat(undefined, {
+    return this._formatWithTimeZone(date, {
       month: "short",
       day: "numeric",
       hour: "numeric",
       minute: "2-digit",
-    }).format(date);
+    });
+  }
+
+  _formatWithTimeZone(date, options) {
+    const formatterOptions = { ...options };
+    const hassTimeZone = this._hass?.config?.time_zone;
+    if (hassTimeZone) {
+      formatterOptions.timeZone = hassTimeZone;
+    }
+
+    return new Intl.DateTimeFormat(undefined, formatterOptions).format(date);
   }
 
   _formatKwh(value) {

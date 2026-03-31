@@ -75,6 +75,10 @@ fields. The integration also imports those hourly points into Home Assistant
 statistics using a stable external statistics ID so they can be graphed and
 reused natively by Home Assistant.
 
+`api_start_utc` and `api_end_utc` always reflect the raw API hour boundaries in
+UTC. The `start` and `end` fields are converted into the timezone configured in
+Home Assistant.
+
 ## Dashboard Card
 
 This integration ships with a bundled Lovelace custom card that plots hourly
@@ -107,7 +111,8 @@ Card behavior:
 
 - Reads the `hourly_data` attribute from `Latest hourly consumption`
 - Uses `api_start_utc` as the plotted timestamp for each point
-- Shows local start and local end timestamps in the hover tooltip
+- Shows local start and local end timestamps in the hover tooltip using Home
+  Assistant's configured timezone
 - Defaults to the latest 24 hourly points, configurable with `hours_to_show`
 - Includes an on-card dropdown to switch the visible hour range quickly
 

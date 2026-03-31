@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, tzinfo
 from email.utils import parsedate_to_datetime
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -46,11 +46,13 @@ class EloverblikApiClient:
         session: aiohttp.ClientSession,
         refresh_token: str,
         metering_point: str,
+        local_time_zone: tzinfo = LOCAL_TIME_ZONE,
     ) -> None:
         """Initialize the API client."""
         self._session = session
         self._refresh_token = refresh_token
         self._metering_point = metering_point
+        self._local_time_zone = local_time_zone
         self._access_token: str | None = None
         self._access_token_expires_at: datetime | None = None
 
@@ -261,10 +263,14 @@ class EloverblikApiClient:
                 start_date=start_date,
                 end_date=end_date,
             )
-        return self._parse_time_series(data)
+        return self._parse_time_series(data, local_time_zone=self._local_time_zone)
 
     @staticmethod
-    def _parse_time_series(data: dict[str, Any]) -> dict[str, Any]:
+    def _parse_time_series(
+        data: dict[str, Any],
+        *,
+        local_time_zone: tzinfo = LOCAL_TIME_ZONE,
+    ) -> dict[str, Any]:
         """Parse the API response into consumption data.
 
         Iterates over all periods (days) in the response, building a
@@ -309,7 +315,7 @@ class EloverblikApiClient:
             start_time_str = period["timeInterval"]["start"]
             start_time = datetime.fromisoformat(start_time_str.replace("Z", "+00:00"))
             day_total = 0.0
-            local_start = start_time.astimezone(LOCAL_TIME_ZONE)
+            local_start = start_time.astimezone(local_time_zone)
 
             for point in period.get("Point", []):
                 offset = int(point["position"]) - 1
@@ -317,8 +323,8 @@ class EloverblikApiClient:
                 point_end = point_start + timedelta(hours=1)
                 api_start = point_start.astimezone(UTC)
                 api_end = point_end.astimezone(UTC)
-                time_slot = point_start.astimezone(LOCAL_TIME_ZONE)
-                end_slot = point_end.astimezone(LOCAL_TIME_ZONE)
+                time_slot = point_start.astimezone(local_time_zone)
+                end_slot = point_end.astimezone(local_time_zone)
                 quantity = float(point["out_Quantity.quantity"])
                 day_total += quantity
                 hourly.append(
