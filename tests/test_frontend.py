@@ -80,7 +80,7 @@ async def test_async_setup_frontend_skips_yaml_resource_registration() -> None:
 
 
 def test_readme_example_matches_shipped_custom_card_name() -> None:
-    """Test documentation references the shipped custom card type."""
+    """Test documentation references the shipped custom card and editor hooks."""
     repo_root = Path(__file__).resolve().parents[1]
     readme = (repo_root / "README.md").read_text()
     frontend_js = (
@@ -93,3 +93,5 @@ def test_readme_example_matches_shipped_custom_card_name() -> None:
 
     assert "type: custom:eloverblik-hourly-card" in readme
     assert 'customElements.define("eloverblik-hourly-card"' in frontend_js
+    assert '"eloverblik-hourly-card-editor"' in frontend_js
+    assert "static getStubConfig(hass)" in frontend_js

@@ -1,4 +1,17 @@
 class EloverblikHourlyCard extends HTMLElement {
+  static async getConfigElement() {
+    return document.createElement("eloverblik-hourly-card-editor");
+  }
+
+  static getStubConfig(hass) {
+    const suggestedEntity = findSuggestedEntity(hass);
+    return {
+      entity: suggestedEntity || "",
+      title: "Eloverblik Hourly API Data",
+      hours_to_show: 24,
+    };
+  }
+
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
@@ -494,7 +507,224 @@ class EloverblikHourlyCard extends HTMLElement {
   }
 }
 
+class EloverblikHourlyCardEditor extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: "open" });
+    this._config = {
+      entity: "",
+      title: "Eloverblik Hourly API Data",
+      hours_to_show: 24,
+    };
+    this._hass = undefined;
+  }
+
+  setConfig(config) {
+    this._config = {
+      entity: "",
+      title: "Eloverblik Hourly API Data",
+      hours_to_show: 24,
+      ...config,
+    };
+    this._render();
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    if (!this._config.entity) {
+      const suggestedEntity = findSuggestedEntity(hass);
+      if (suggestedEntity) {
+        this._config = {
+          ...this._config,
+          entity: suggestedEntity,
+        };
+        this._emitConfigChanged();
+      }
+    }
+    this._render();
+  }
+
+  _render() {
+    if (!this.shadowRoot) {
+      return;
+    }
+
+    const entityOptions = getEntityOptions(this._hass, this._config.entity);
+
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host {
+          display: block;
+        }
+
+        .form {
+          display: grid;
+          gap: 16px;
+        }
+
+        label {
+          color: var(--primary-text-color);
+          display: grid;
+          font-size: 0.9rem;
+          gap: 6px;
+        }
+
+        .hint {
+          color: var(--secondary-text-color);
+          font-size: 0.8rem;
+        }
+
+        input,
+        select {
+          background: var(--card-background-color);
+          border: 1px solid var(--divider-color);
+          border-radius: 10px;
+          color: var(--primary-text-color);
+          font: inherit;
+          padding: 10px 12px;
+        }
+      </style>
+      <div class="form">
+        <label>
+          Entity
+          <select id="entity">
+            ${entityOptions
+              .map(
+                (option) => `
+                  <option value="${escapeHtml(option.value)}" ${
+                    option.value === this._config.entity ? "selected" : ""
+                  }>
+                    ${escapeHtml(option.label)}
+                  </option>
+                `,
+              )
+              .join("")}
+          </select>
+          <span class="hint">Choose the Eloverblik "Latest hourly consumption" entity.</span>
+        </label>
+
+        <label>
+          Title
+          <input
+            id="title"
+            type="text"
+            value="${escapeHtml(this._config.title || "")}"
+            placeholder="Eloverblik Hourly API Data"
+          />
+        </label>
+
+        <label>
+          Hours to show
+          <input
+            id="hours_to_show"
+            type="number"
+            min="1"
+            step="1"
+            value="${escapeHtml(String(this._config.hours_to_show || 24))}"
+          />
+          <span class="hint">Defaults to the latest 24 hourly points.</span>
+        </label>
+      </div>
+    `;
+
+    this.shadowRoot.getElementById("entity")?.addEventListener("change", (event) => {
+      this._updateConfig("entity", event.target.value);
+    });
+    this.shadowRoot.getElementById("title")?.addEventListener("input", (event) => {
+      const value = event.target.value.trim();
+      this._updateConfig("title", value || "Eloverblik Hourly API Data");
+    });
+    this.shadowRoot
+      .getElementById("hours_to_show")
+      ?.addEventListener("change", (event) => {
+        const parsed = Number(event.target.value);
+        this._updateConfig(
+          "hours_to_show",
+          Number.isFinite(parsed) && parsed > 0 ? parsed : 24,
+        );
+      });
+  }
+
+  _updateConfig(key, value) {
+    this._config = {
+      ...this._config,
+      [key]: value,
+    };
+    this._emitConfigChanged();
+  }
+
+  _emitConfigChanged() {
+    this.dispatchEvent(
+      new CustomEvent("config-changed", {
+        detail: { config: this._config },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+}
+
+function findSuggestedEntity(hass) {
+  const options = getEntityOptions(hass);
+  return options[0]?.value || "";
+}
+
+function getEntityOptions(hass, selectedEntity = "") {
+  const states = Object.entries(hass?.states || {});
+  const options = states
+    .filter(([, stateObj]) => hasHourlyData(stateObj))
+    .map(([entityId, stateObj]) => ({
+      value: entityId,
+      label: stateObj.attributes.friendly_name
+        ? `${stateObj.attributes.friendly_name} (${entityId})`
+        : entityId,
+    }))
+    .sort((left, right) => left.label.localeCompare(right.label));
+
+  if (!options.length) {
+    return [
+      {
+        value: selectedEntity,
+        label: selectedEntity || "No matching entities found",
+      },
+    ];
+  }
+
+  if (selectedEntity && !options.some((option) => option.value === selectedEntity)) {
+    return [
+      {
+        value: selectedEntity,
+        label: `${selectedEntity} (current)`,
+      },
+      ...options,
+    ];
+  }
+
+  return options;
+}
+
+function hasHourlyData(stateObj) {
+  if (!stateObj || !Array.isArray(stateObj.attributes?.hourly_data)) {
+    return false;
+  }
+
+  return true;
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
 customElements.define("eloverblik-hourly-card", EloverblikHourlyCard);
+customElements.define(
+  "eloverblik-hourly-card-editor",
+  EloverblikHourlyCardEditor,
+);
 
 window.customCards = window.customCards || [];
 window.customCards.push({

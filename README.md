@@ -100,6 +100,9 @@ title: Eloverblik Hourly API Data
 hours_to_show: 24
 ```
 
+The card also exposes a visual editor in Lovelace and will try to preselect the
+first matching Eloverblik consumption entity automatically.
+
 Card behavior:
 
 - Reads the `hourly_data` attribute from `Latest hourly consumption`
@@ -121,3 +124,36 @@ Run linting:
 ruff check custom_components/ tests/
 ruff format --check custom_components/ tests/
 ```
+
+## Publishing Releases
+
+For HACS, publish versioned GitHub releases so updates are easy to detect and
+install.
+
+Recommended workflow:
+
+1. Update `custom_components/eloverblik_custom/manifest.json` and bump the
+   `"version"` value, for example from `0.1.0` to `0.1.1`.
+2. Commit the change.
+3. Create an annotated git tag that matches the release version, usually with a
+   leading `v`, for example `v0.1.1`.
+4. Push the branch and tag to GitHub.
+5. Create a GitHub Release from that tag.
+
+Example:
+
+```bash
+git add custom_components/eloverblik_custom/manifest.json README.md hacs.json
+git commit -m "Prepare v0.1.1 release"
+git tag -a v0.1.1 -m "Release v0.1.1"
+git push origin main
+git push origin v0.1.1
+```
+
+Notes:
+
+- Keep `manifest.json` version and release tag aligned, for example
+  `0.1.1` in the manifest and `v0.1.1` as the git tag
+- Do not move or reuse old tags after publishing; create a new version instead
+- Use patch releases like `0.1.1` for fixes and minor releases like `0.2.0`
+  for new features
