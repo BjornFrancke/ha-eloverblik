@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from unittest.mock import AsyncMock, Mock, patch
 
 from homeassistant.exceptions import ConfigEntryAuthFailed
@@ -9,12 +10,22 @@ from homeassistant.helpers.update_coordinator import UpdateFailed
 import pytest
 
 from custom_components.eloverblik_custom.api import (
+    LOCAL_TIME_ZONE,
     EloverblikAuthError,
     EloverblikConnectionError,
 )
 from custom_components.eloverblik_custom.coordinator import (
     EloverblikDataUpdateCoordinator,
 )
+
+
+class FixedDateTime(datetime):
+    """Freeze coordinator time-dependent calculations for tests."""
+
+    @classmethod
+    def now(cls, tz=None):  # noqa: ANN206
+        """Return a fixed point in time."""
+        return cls(2026, 3, 31, 12, 0, tzinfo=tz)
 
 
 async def test_coordinator_returns_latest_consumption(hass) -> None:
@@ -40,9 +51,23 @@ async def test_coordinator_returns_latest_consumption(hass) -> None:
     }
     coordinator = EloverblikDataUpdateCoordinator(hass, client)
 
-    result = await coordinator._async_update_data()
+    with (
+        patch(
+            "custom_components.eloverblik_custom.coordinator.datetime",
+            FixedDateTime,
+        ),
+        patch(
+            "custom_components.eloverblik_custom.coordinator.get_instance",
+            side_effect=KeyError,
+        ),
+    ):
+        result = await coordinator._async_update_data()
 
     assert result["latest_hour_kwh"] == 1.23
+    client.async_get_latest_consumption.assert_called_once_with(
+        start_date="2026-03-24",
+        end_date="2026-04-01",
+    )
 
 
 async def test_coordinator_maps_auth_errors(hass) -> None:
@@ -52,7 +77,17 @@ async def test_coordinator_maps_auth_errors(hass) -> None:
     client.async_get_latest_consumption.side_effect = EloverblikAuthError("bad token")
     coordinator = EloverblikDataUpdateCoordinator(hass, client)
 
-    with pytest.raises(ConfigEntryAuthFailed, match="Authentication failed: bad token"):
+    with (
+        patch(
+            "custom_components.eloverblik_custom.coordinator.datetime",
+            FixedDateTime,
+        ),
+        patch(
+            "custom_components.eloverblik_custom.coordinator.get_instance",
+            side_effect=KeyError,
+        ),
+        pytest.raises(ConfigEntryAuthFailed, match="Authentication failed: bad token"),
+    ):
         await coordinator._async_update_data()
 
 
@@ -65,7 +100,17 @@ async def test_coordinator_maps_update_failures(hass) -> None:
     )
     coordinator = EloverblikDataUpdateCoordinator(hass, client)
 
-    with pytest.raises(UpdateFailed, match="Error fetching data: network down"):
+    with (
+        patch(
+            "custom_components.eloverblik_custom.coordinator.datetime",
+            FixedDateTime,
+        ),
+        patch(
+            "custom_components.eloverblik_custom.coordinator.get_instance",
+            side_effect=KeyError,
+        ),
+        pytest.raises(UpdateFailed, match="Error fetching data: network down"),
+    ):
         await coordinator._async_update_data()
 
 
@@ -100,6 +145,10 @@ async def test_coordinator_imports_new_hourly_statistics(hass) -> None:
     coordinator = EloverblikDataUpdateCoordinator(hass, client)
 
     with (
+        patch(
+            "custom_components.eloverblik_custom.coordinator.datetime",
+            FixedDateTime,
+        ),
         patch(
             "custom_components.eloverblik_custom.coordinator.get_instance",
             return_value=recorder,
@@ -163,6 +212,10 @@ async def test_coordinator_skips_existing_hourly_statistics(hass) -> None:
 
     with (
         patch(
+            "custom_components.eloverblik_custom.coordinator.datetime",
+            FixedDateTime,
+        ),
+        patch(
             "custom_components.eloverblik_custom.coordinator.get_instance",
             return_value=recorder,
         ),
@@ -176,3 +229,91 @@ async def test_coordinator_skips_existing_hourly_statistics(hass) -> None:
     _, _, statistics = mock_add_external_statistics.call_args.args
     assert [stat["state"] for stat in statistics] == [0.4]
     assert [round(stat["sum"], 3) for stat in statistics] == [1.2]
+
+
+async def test_coordinator_uses_recent_window_for_routine_updates(hass) -> None:
+    """Test routine polling uses a smaller rolling fetch window."""
+    client = AsyncMock()
+    client.metering_point = "571313174200318497"
+    client.async_get_latest_consumption.return_value = {
+        "latest_hour": None,
+        "latest_hour_kwh": None,
+        "window_total_kwh": 0.0,
+        "hourly": [],
+        "daily": {},
+    }
+    recorder = Mock()
+    recorder.async_add_executor_job = AsyncMock(
+        return_value={
+            "eloverblik_custom:571313174200318497_hourly_consumption": [
+                {
+                    "start": datetime(
+                        2026, 3, 29, 0, 0, tzinfo=LOCAL_TIME_ZONE
+                    ).timestamp(),
+                    "sum": 12.3,
+                }
+            ]
+        }
+    )
+    coordinator = EloverblikDataUpdateCoordinator(hass, client)
+
+    with (
+        patch(
+            "custom_components.eloverblik_custom.coordinator.datetime",
+            FixedDateTime,
+        ),
+        patch(
+            "custom_components.eloverblik_custom.coordinator.get_instance",
+            return_value=recorder,
+        ),
+    ):
+        await coordinator._async_update_data()
+
+    client.async_get_latest_consumption.assert_called_once_with(
+        start_date="2026-03-28",
+        end_date="2026-04-01",
+    )
+
+
+async def test_coordinator_extends_window_to_catch_up_after_downtime(hass) -> None:
+    """Test polling expands the fetch window when imported statistics are stale."""
+    client = AsyncMock()
+    client.metering_point = "571313174200318497"
+    client.async_get_latest_consumption.return_value = {
+        "latest_hour": None,
+        "latest_hour_kwh": None,
+        "window_total_kwh": 0.0,
+        "hourly": [],
+        "daily": {},
+    }
+    recorder = Mock()
+    recorder.async_add_executor_job = AsyncMock(
+        return_value={
+            "eloverblik_custom:571313174200318497_hourly_consumption": [
+                {
+                    "start": datetime(
+                        2026, 3, 20, 0, 0, tzinfo=LOCAL_TIME_ZONE
+                    ).timestamp(),
+                    "sum": 12.3,
+                }
+            ]
+        }
+    )
+    coordinator = EloverblikDataUpdateCoordinator(hass, client)
+
+    with (
+        patch(
+            "custom_components.eloverblik_custom.coordinator.datetime",
+            FixedDateTime,
+        ),
+        patch(
+            "custom_components.eloverblik_custom.coordinator.get_instance",
+            return_value=recorder,
+        ),
+    ):
+        await coordinator._async_update_data()
+
+    client.async_get_latest_consumption.assert_called_once_with(
+        start_date="2026-03-19",
+        end_date="2026-04-01",
+    )

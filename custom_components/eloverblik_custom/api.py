@@ -2,13 +2,26 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+import asyncio
+from datetime import UTC, datetime, timedelta
+from email.utils import parsedate_to_datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
 import aiohttp
 
-from .const import API_METER_DATA_URL, API_TOKEN_URL, DEFAULT_HISTORY_DAYS, LOGGER
+from .const import (
+    ACCESS_TOKEN_CACHE_TTL_SECONDS,
+    ACCESS_TOKEN_REFRESH_BUFFER_SECONDS,
+    API_METER_DATA_URL,
+    API_TOKEN_URL,
+    DEFAULT_HISTORY_DAYS,
+    LOGGER,
+    MAX_RETRY_ATTEMPTS,
+    MAX_RETRY_DELAY_SECONDS,
+    RETRY_BACKOFF_BASE_SECONDS,
+    RETRYABLE_HTTP_STATUS_CODES,
+)
 
 LOCAL_TIME_ZONE = ZoneInfo("Europe/Copenhagen")
 
@@ -38,26 +51,159 @@ class EloverblikApiClient:
         self._session = session
         self._refresh_token = refresh_token
         self._metering_point = metering_point
+        self._access_token: str | None = None
+        self._access_token_expires_at: datetime | None = None
 
     @property
     def metering_point(self) -> str:
         """Return the configured metering point ID."""
         return self._metering_point
 
-    async def async_get_access_token(self) -> str:
+    def _invalidate_access_token(self) -> None:
+        """Clear any cached access token."""
+        self._access_token = None
+        self._access_token_expires_at = None
+
+    def _has_valid_cached_access_token(self) -> bool:
+        """Return whether a cached access token can still be reused."""
+        if self._access_token is None or self._access_token_expires_at is None:
+            return False
+
+        refresh_at = self._access_token_expires_at - timedelta(
+            seconds=ACCESS_TOKEN_REFRESH_BUFFER_SECONDS
+        )
+        return datetime.now(UTC) < refresh_at
+
+    @staticmethod
+    def _get_retry_delay(retry_after: str | None, attempt: int) -> float:
+        """Return the delay to use before the next retry."""
+        if retry_after:
+            try:
+                return max(0.0, min(float(retry_after), MAX_RETRY_DELAY_SECONDS))
+            except ValueError:
+                retry_at = parsedate_to_datetime(retry_after)
+                if retry_at.tzinfo is None:
+                    retry_at = retry_at.replace(tzinfo=UTC)
+                return max(
+                    0.0,
+                    min(
+                        (retry_at - datetime.now(UTC)).total_seconds(),
+                        MAX_RETRY_DELAY_SECONDS,
+                    ),
+                )
+
+        backoff_seconds = RETRY_BACKOFF_BASE_SECONDS * (2 ** (attempt - 1))
+        return float(min(backoff_seconds, MAX_RETRY_DELAY_SECONDS))
+
+    async def _async_request_json(
+        self,
+        method: str,
+        url: str,
+        *,
+        auth_error_message: str,
+        **request_kwargs: Any,
+    ) -> dict[str, Any]:
+        """Perform an API request with bounded retries for transient failures."""
+        request = getattr(self._session, method)
+
+        for attempt in range(1, MAX_RETRY_ATTEMPTS + 1):
+            try:
+                async with request(url, **request_kwargs) as response:
+                    if response.status == 401:
+                        raise EloverblikAuthError(auth_error_message)
+
+                    if (
+                        response.status in RETRYABLE_HTTP_STATUS_CODES
+                        and attempt < MAX_RETRY_ATTEMPTS
+                    ):
+                        retry_delay = self._get_retry_delay(
+                            response.headers.get("Retry-After"), attempt
+                        )
+                        LOGGER.warning(
+                            (
+                                "Eloverblik API returned %s for %s, "
+                                "retrying in %.1f seconds"
+                            ),
+                            response.status,
+                            url,
+                            retry_delay,
+                        )
+                        await asyncio.sleep(retry_delay)
+                        continue
+
+                    response.raise_for_status()
+                    return await response.json()
+            except EloverblikAuthError:
+                raise
+            except aiohttp.ClientResponseError as err:
+                if (
+                    err.status in RETRYABLE_HTTP_STATUS_CODES
+                    and attempt < MAX_RETRY_ATTEMPTS
+                ):
+                    retry_delay = self._get_retry_delay(
+                        err.headers.get("Retry-After") if err.headers else None,
+                        attempt,
+                    )
+                    LOGGER.warning(
+                        (
+                            "Eloverblik API request to %s failed with %s, "
+                            "retrying in %.1f seconds"
+                        ),
+                        url,
+                        err.status,
+                        retry_delay,
+                    )
+                    await asyncio.sleep(retry_delay)
+                    continue
+                raise EloverblikConnectionError(
+                    f"Eloverblik API request failed: {err}"
+                ) from err
+            except (
+                TimeoutError,
+                aiohttp.ClientConnectionError,
+                aiohttp.ServerTimeoutError,
+            ) as err:
+                if attempt < MAX_RETRY_ATTEMPTS:
+                    retry_delay = self._get_retry_delay(None, attempt)
+                    LOGGER.warning(
+                        (
+                            "Transient Eloverblik API error for %s: %s; "
+                            "retrying in %.1f seconds"
+                        ),
+                        url,
+                        err,
+                        retry_delay,
+                    )
+                    await asyncio.sleep(retry_delay)
+                    continue
+                raise EloverblikConnectionError(
+                    f"Error connecting to Eloverblik API: {err}"
+                ) from err
+            except aiohttp.ClientError as err:
+                raise EloverblikConnectionError(
+                    f"Error connecting to Eloverblik API: {err}"
+                ) from err
+
+        raise EloverblikConnectionError(f"Error connecting to Eloverblik API: {url}")
+
+    async def async_get_access_token(self, *, force_refresh: bool = False) -> str:
         """Exchange refresh token for an access token."""
+        if not force_refresh and self._has_valid_cached_access_token():
+            return self._access_token  # type: ignore[return-value]
+
         headers = {"Authorization": f"Bearer {self._refresh_token}"}
-        try:
-            async with self._session.get(API_TOKEN_URL, headers=headers) as response:
-                if response.status == 401:
-                    raise EloverblikAuthError("Invalid refresh token")
-                response.raise_for_status()
-                data = await response.json()
-                return data["result"]
-        except aiohttp.ClientError as err:
-            raise EloverblikConnectionError(
-                f"Error connecting to Eloverblik API: {err}"
-            ) from err
+        data = await self._async_request_json(
+            "get",
+            API_TOKEN_URL,
+            headers=headers,
+            auth_error_message="Invalid refresh token",
+        )
+
+        self._access_token = data["result"]
+        self._access_token_expires_at = datetime.now(UTC) + timedelta(
+            seconds=ACCESS_TOKEN_CACHE_TTL_SECONDS
+        )
+        return self._access_token
 
     async def async_get_time_series(
         self,
@@ -83,24 +229,38 @@ class EloverblikApiClient:
             }
         }
 
-        try:
-            async with self._session.post(url, headers=headers, json=body) as response:
-                if response.status == 401:
-                    raise EloverblikAuthError("Access token expired or invalid")
-                response.raise_for_status()
-                return await response.json()
-        except aiohttp.ClientError as err:
-            raise EloverblikConnectionError(
-                f"Error fetching time series: {err}"
-            ) from err
+        return await self._async_request_json(
+            "post",
+            url,
+            headers=headers,
+            json=body,
+            auth_error_message="Access token expired or invalid",
+        )
 
-    async def async_get_latest_consumption(self) -> dict[str, Any]:
+    async def async_get_latest_consumption(
+        self,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> dict[str, Any]:
         """Fetch the latest consumption data.
 
         Returns the latest hourly reading plus hourly and daily breakdowns.
         """
         access_token = await self.async_get_access_token()
-        data = await self.async_get_time_series(access_token)
+        try:
+            data = await self.async_get_time_series(
+                access_token,
+                start_date=start_date,
+                end_date=end_date,
+            )
+        except EloverblikAuthError:
+            self._invalidate_access_token()
+            access_token = await self.async_get_access_token(force_refresh=True)
+            data = await self.async_get_time_series(
+                access_token,
+                start_date=start_date,
+                end_date=end_date,
+            )
         return self._parse_time_series(data)
 
     @staticmethod

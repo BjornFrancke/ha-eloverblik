@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
 import aiohttp
@@ -23,10 +24,12 @@ class MockResponse:
         *,
         status: int,
         json_data: dict | None = None,
+        headers: dict | None = None,
         raise_error: Exception | None = None,
     ) -> None:
         self.status = status
         self._json_data = json_data or {}
+        self.headers = headers or {}
         self._raise_error = raise_error
 
     async def __aenter__(self) -> MockResponse:
@@ -68,6 +71,20 @@ async def test_async_get_access_token_success(
     session.get.assert_called_once_with(
         API_TOKEN_URL, headers={"Authorization": "Bearer refresh_token"}
     )
+
+
+async def test_async_get_access_token_uses_cache(
+    api_client: tuple[EloverblikApiClient, MagicMock],
+) -> None:
+    """Test cached access tokens avoid repeated refresh-token exchanges."""
+    client, session = api_client
+    session.get.return_value = MockResponse(status=200, json_data={"result": "access"})
+
+    first = await client.async_get_access_token()
+    second = await client.async_get_access_token()
+
+    assert first == second == "access"
+    session.get.assert_called_once()
 
 
 async def test_async_get_access_token_invalid_token(
@@ -137,3 +154,71 @@ async def test_async_get_time_series_connection_error(
 
     with pytest.raises(EloverblikConnectionError, match="network down"):
         await client.async_get_time_series("access_token")
+
+
+async def test_async_get_time_series_retries_transient_http_errors(
+    api_client: tuple[EloverblikApiClient, MagicMock],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test transient HTTP failures are retried with Retry-After support."""
+    client, session = api_client
+    payload = {"result": [{"success": True, "errorCode": 10000}]}
+    session.post.side_effect = [
+        MockResponse(status=503, headers={"Retry-After": "2"}),
+        MockResponse(status=200, json_data=payload),
+    ]
+    sleep_calls: list[float] = []
+
+    async def fake_sleep(delay: float) -> None:
+        sleep_calls.append(delay)
+
+    monkeypatch.setattr(
+        "custom_components.eloverblik_custom.api.asyncio.sleep",
+        fake_sleep,
+    )
+
+    result = await client.async_get_time_series("access_token")
+
+    assert result == payload
+    assert sleep_calls == [2.0]
+    assert session.post.call_count == 2
+
+
+async def test_async_get_latest_consumption_refreshes_expired_access_token(
+    api_client: tuple[EloverblikApiClient, MagicMock],
+) -> None:
+    """Test a 401 time-series response triggers a token refresh and retry."""
+    client, session = api_client
+    session.get.side_effect = [
+        MockResponse(status=200, json_data={"result": "stale_access"}),
+        MockResponse(status=200, json_data={"result": "fresh_access"}),
+    ]
+    session.post.side_effect = [
+        MockResponse(status=401),
+        MockResponse(status=200, json_data={"result": []}),
+    ]
+
+    result = await client.async_get_latest_consumption(
+        start_date="2026-03-28",
+        end_date="2026-03-31",
+    )
+
+    assert result["latest_hour_kwh"] is None
+    assert session.get.call_count == 2
+    assert session.post.call_count == 2
+    assert client._access_token == "fresh_access"
+
+
+async def test_async_get_access_token_refreshes_when_expiring_soon(
+    api_client: tuple[EloverblikApiClient, MagicMock],
+) -> None:
+    """Test a cached token is refreshed shortly before expiry."""
+    client, session = api_client
+    client._access_token = "cached"
+    client._access_token_expires_at = datetime.now(UTC) + timedelta(minutes=5)
+    session.get.return_value = MockResponse(status=200, json_data={"result": "fresh"})
+
+    token = await client.async_get_access_token()
+
+    assert token == "fresh"
+    session.get.assert_called_once()
