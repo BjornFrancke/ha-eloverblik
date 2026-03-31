@@ -14,6 +14,7 @@ from .const import (
     ACCESS_TOKEN_CACHE_TTL_SECONDS,
     ACCESS_TOKEN_REFRESH_BUFFER_SECONDS,
     API_METER_DATA_URL,
+    API_METERING_POINTS_URL,
     API_TOKEN_URL,
     DEFAULT_HISTORY_DAYS,
     LOGGER,
@@ -60,6 +61,33 @@ class EloverblikApiClient:
     def metering_point(self) -> str:
         """Return the configured metering point ID."""
         return self._metering_point
+
+    @staticmethod
+    def _format_metering_point_label(metering_point: dict[str, Any]) -> str:
+        """Build a readable label for a metering point choice."""
+        metering_point_id = metering_point["meteringPointId"]
+        address_parts = [
+            " ".join(
+                part
+                for part in (
+                    metering_point.get("streetName"),
+                    metering_point.get("buildingNumber"),
+                )
+                if part
+            ).strip(),
+            " ".join(
+                part
+                for part in (
+                    metering_point.get("postcode"),
+                    metering_point.get("cityName"),
+                )
+                if part
+            ).strip(),
+        ]
+        address = ", ".join(part for part in address_parts if part)
+        return (
+            f"{metering_point_id} - {address}" if address else str(metering_point_id)
+        )
 
     def _invalidate_access_token(self) -> None:
         """Clear any cached access token."""
@@ -238,6 +266,32 @@ class EloverblikApiClient:
             json=body,
             auth_error_message="Access token expired or invalid",
         )
+
+    async def async_get_metering_points(
+        self, access_token: str
+    ) -> list[dict[str, str]]:
+        """Fetch metering points available for the authenticated customer."""
+        data = await self._async_request_json(
+            "get",
+            API_METERING_POINTS_URL,
+            headers={"Authorization": f"Bearer {access_token}"},
+            auth_error_message="Access token expired or invalid",
+        )
+
+        metering_points: list[dict[str, str]] = []
+        for metering_point in data.get("result", []):
+            metering_point_id = metering_point.get("meteringPointId")
+            if not metering_point_id:
+                continue
+
+            metering_points.append(
+                {
+                    "metering_point": str(metering_point_id),
+                    "label": self._format_metering_point_label(metering_point),
+                }
+            )
+
+        return metering_points
 
     async def async_get_latest_consumption(
         self,

@@ -3,10 +3,16 @@
     "step": {
       "user": {
         "title": "Eloverblik",
-        "description": "Indtast dine Eloverblik API-oplysninger. Du kan hente din refresh-token fra https://eloverblik.dk",
+        "description": "Indtast dit Eloverblik refresh-token. Hvis din konto har adgang til flere maale punkter, kan du vaelge et i naeste trin.",
         "data": {
-          "refresh_token": "Refresh-token",
-          "metering_point": "Målepunkt-ID"
+          "refresh_token": "Refresh-token"
+        }
+      },
+      "select_metering_point": {
+        "title": "Vaelg maale punkt",
+        "description": "Vaelg hvilket maale punkt der skal importeres fra Eloverblik.",
+        "data": {
+          "metering_point": "Maale punkt"
         }
       },
       "reauth_confirm": {
@@ -20,6 +26,7 @@
     "error": {
       "auth": "Ugyldigt refresh-token.",
       "connection": "Kunne ikke oprette forbindelse til Eloverblik API'en.",
+      "no_metering_points": "Der blev ikke fundet nogen maale punkter for denne konto.",
       "unknown": "Der opstod en uventet fejl."
     },
     "abort": {

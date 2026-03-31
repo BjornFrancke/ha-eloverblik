@@ -38,3 +38,4 @@ secrets.yaml
 # OS
 .DS_Store
 Thumbs.db
+api-1.yaml

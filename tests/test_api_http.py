@@ -13,7 +13,11 @@ from custom_components.eloverblik_custom.api import (
     EloverblikAuthError,
     EloverblikConnectionError,
 )
-from custom_components.eloverblik_custom.const import API_METER_DATA_URL, API_TOKEN_URL
+from custom_components.eloverblik_custom.const import (
+    API_METER_DATA_URL,
+    API_METERING_POINTS_URL,
+    API_TOKEN_URL,
+)
 
 
 class MockResponse:
@@ -132,6 +136,51 @@ async def test_async_get_time_series_success(
         },
         json={"meteringPoints": {"meteringPoint": ["571313174200318497"]}},
     )
+
+
+async def test_async_get_metering_points_success(
+    api_client: tuple[EloverblikApiClient, MagicMock],
+) -> None:
+    """Test successful metering point discovery."""
+    client, session = api_client
+    session.get.return_value = MockResponse(
+        status=200,
+        json_data={
+            "result": [
+                {
+                    "meteringPointId": "571313174200318497",
+                    "streetName": "Mosevangen",
+                    "buildingNumber": "54",
+                    "postcode": "4400",
+                    "cityName": "Kalundborg",
+                }
+            ]
+        },
+    )
+
+    result = await client.async_get_metering_points("access_token")
+
+    assert result == [
+        {
+            "metering_point": "571313174200318497",
+            "label": "571313174200318497 - Mosevangen 54, 4400 Kalundborg",
+        }
+    ]
+    session.get.assert_called_once_with(
+        API_METERING_POINTS_URL,
+        headers={"Authorization": "Bearer access_token"},
+    )
+
+
+async def test_async_get_metering_points_invalid_access_token(
+    api_client: tuple[EloverblikApiClient, MagicMock],
+) -> None:
+    """Test auth failures during metering point discovery."""
+    client, session = api_client
+    session.get.return_value = MockResponse(status=401)
+
+    with pytest.raises(EloverblikAuthError, match="Access token expired or invalid"):
+        await client.async_get_metering_points("access_token")
 
 
 async def test_async_get_time_series_invalid_access_token(

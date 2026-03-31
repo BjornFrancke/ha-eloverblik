@@ -6,7 +6,7 @@ from Eloverblik / Energinet.
 ## Features
 
 - Config flow setup from the Home Assistant UI
-- Uses your Eloverblik refresh token and metering point ID
+- Uses your Eloverblik refresh token and auto-discovers available metering points
 - Fetches hourly consumption data from the Eloverblik API
 - Exposes a sensor for the latest hourly consumption reading
 - Ships a bundled Lovelace card for inspecting API-timestamped hourly points
@@ -37,12 +37,11 @@ Add the integration from the Home Assistant UI:
 1. Go to `Settings -> Devices & services`.
 2. Choose `Add integration`.
 3. Search for `Eloverblik Custom`.
-4. Enter:
-   - Your Eloverblik refresh token
-   - Your metering point ID
+4. Enter your Eloverblik refresh token.
+5. If your account has access to multiple metering points, choose the one you
+   want to import.
 
-You can get your refresh token and metering point information from
-[eloverblik.dk](https://eloverblik.dk).
+You can get your refresh token from [eloverblik.dk](https://eloverblik.dk).
 
 ## Data Exposed
 

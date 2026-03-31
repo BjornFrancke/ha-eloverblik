@@ -3,10 +3,16 @@
     "step": {
       "user": {
         "title": "Eloverblik",
-        "description": "Enter your Eloverblik API credentials. You can get a refresh token from https://eloverblik.dk",
+        "description": "Enter your Eloverblik refresh token. If your account has access to multiple metering points, you can choose one in the next step.",
         "data": {
-          "refresh_token": "Refresh Token",
-          "metering_point": "Metering Point ID"
+          "refresh_token": "Refresh Token"
+        }
+      },
+      "select_metering_point": {
+        "title": "Select Metering Point",
+        "description": "Choose which metering point to import from Eloverblik.",
+        "data": {
+          "metering_point": "Metering Point"
         }
       },
       "reauth_confirm": {
@@ -20,6 +26,7 @@
     "error": {
       "auth": "Invalid refresh token.",
       "connection": "Unable to connect to Eloverblik API.",
+      "no_metering_points": "No metering points were found for this account.",
       "unknown": "Unexpected error occurred."
     },
     "abort": {
