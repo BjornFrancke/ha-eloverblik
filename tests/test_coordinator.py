@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, Mock, patch
 
 from homeassistant.exceptions import ConfigEntryAuthFailed
@@ -34,6 +34,8 @@ async def test_coordinator_returns_latest_consumption(hass) -> None:
     client.metering_point = "571313174200318497"
     client.async_get_latest_consumption.return_value = {
         "latest_hour": {
+            "api_start_utc": "2024-01-01T23:00:00Z",
+            "api_end_utc": "2024-01-02T00:00:00Z",
             "start": "2024-01-02T00:00:00+01:00",
             "end": "2024-01-02T01:00:00+01:00",
             "kwh": 1.23,
@@ -42,6 +44,8 @@ async def test_coordinator_returns_latest_consumption(hass) -> None:
         "window_total_kwh": 1.23,
         "hourly": [
             {
+                "api_start_utc": "2024-01-01T23:00:00Z",
+                "api_end_utc": "2024-01-02T00:00:00Z",
                 "start": "2024-01-02T00:00:00+01:00",
                 "end": "2024-01-02T01:00:00+01:00",
                 "kwh": 1.23,
@@ -120,6 +124,8 @@ async def test_coordinator_imports_new_hourly_statistics(hass) -> None:
     client.metering_point = "571313174200318497"
     client.async_get_latest_consumption.return_value = {
         "latest_hour": {
+            "api_start_utc": "2024-01-02T00:00:00Z",
+            "api_end_utc": "2024-01-02T01:00:00Z",
             "start": "2024-01-02T01:00:00+01:00",
             "end": "2024-01-02T02:00:00+01:00",
             "kwh": 0.3,
@@ -128,11 +134,15 @@ async def test_coordinator_imports_new_hourly_statistics(hass) -> None:
         "window_total_kwh": 0.8,
         "hourly": [
             {
+                "api_start_utc": "2024-01-01T23:00:00Z",
+                "api_end_utc": "2024-01-02T00:00:00Z",
                 "start": "2024-01-02T00:00:00+01:00",
                 "end": "2024-01-02T01:00:00+01:00",
                 "kwh": 0.5,
             },
             {
+                "api_start_utc": "2024-01-02T00:00:00Z",
+                "api_end_utc": "2024-01-02T01:00:00Z",
                 "start": "2024-01-02T01:00:00+01:00",
                 "end": "2024-01-02T02:00:00+01:00",
                 "kwh": 0.3,
@@ -165,6 +175,10 @@ async def test_coordinator_imports_new_hourly_statistics(hass) -> None:
         metadata["statistic_id"]
         == "eloverblik_custom:571313174200318497_hourly_consumption"
     )
+    assert [stat["start"] for stat in statistics] == [
+        datetime(2024, 1, 1, 23, 0, tzinfo=UTC),
+        datetime(2024, 1, 2, 0, 0, tzinfo=UTC),
+    ]
     assert [stat["state"] for stat in statistics] == [0.5, 0.3]
     assert [round(stat["sum"], 3) for stat in statistics] == [0.5, 0.8]
 
@@ -175,6 +189,8 @@ async def test_coordinator_skips_existing_hourly_statistics(hass) -> None:
     client.metering_point = "571313174200318497"
     client.async_get_latest_consumption.return_value = {
         "latest_hour": {
+            "api_start_utc": "2024-01-02T01:00:00Z",
+            "api_end_utc": "2024-01-02T02:00:00Z",
             "start": "2024-01-02T02:00:00+01:00",
             "end": "2024-01-02T03:00:00+01:00",
             "kwh": 0.4,
@@ -183,16 +199,22 @@ async def test_coordinator_skips_existing_hourly_statistics(hass) -> None:
         "window_total_kwh": 1.2,
         "hourly": [
             {
+                "api_start_utc": "2024-01-01T23:00:00Z",
+                "api_end_utc": "2024-01-02T00:00:00Z",
                 "start": "2024-01-02T00:00:00+01:00",
                 "end": "2024-01-02T01:00:00+01:00",
                 "kwh": 0.5,
             },
             {
+                "api_start_utc": "2024-01-02T00:00:00Z",
+                "api_end_utc": "2024-01-02T01:00:00Z",
                 "start": "2024-01-02T01:00:00+01:00",
                 "end": "2024-01-02T02:00:00+01:00",
                 "kwh": 0.3,
             },
             {
+                "api_start_utc": "2024-01-02T01:00:00Z",
+                "api_end_utc": "2024-01-02T02:00:00Z",
                 "start": "2024-01-02T02:00:00+01:00",
                 "end": "2024-01-02T03:00:00+01:00",
                 "kwh": 0.4,
@@ -227,6 +249,9 @@ async def test_coordinator_skips_existing_hourly_statistics(hass) -> None:
 
     mock_add_external_statistics.assert_called_once()
     _, _, statistics = mock_add_external_statistics.call_args.args
+    assert [stat["start"] for stat in statistics] == [
+        datetime(2024, 1, 2, 1, 0, tzinfo=UTC)
+    ]
     assert [stat["state"] for stat in statistics] == [0.4]
     assert [round(stat["sum"], 3) for stat in statistics] == [1.2]
 

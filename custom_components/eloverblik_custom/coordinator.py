@@ -133,7 +133,8 @@ class EloverblikDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         statistics: list[StatisticData] = []
         for entry in hourly:
-            start_dt = datetime.fromisoformat(entry["start"])
+            start_timestamp = entry.get("api_start_utc", entry["start"])
+            start_dt = datetime.fromisoformat(start_timestamp.replace("Z", "+00:00"))
             if last_stat_start is not None and start_dt <= last_stat_start:
                 continue
 
