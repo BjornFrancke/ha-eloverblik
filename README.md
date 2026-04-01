@@ -135,30 +135,37 @@ ruff format --check custom_components/ tests/
 For HACS, publish versioned GitHub releases so updates are easy to detect and
 install.
 
-Recommended workflow:
+Use the release helper from the repository root:
 
-1. Update `custom_components/eloverblik_plus/manifest.json` and bump the
-   `"version"` value, for example from `0.1.0` to `0.1.1`.
-2. Commit the change.
-3. Create an annotated git tag that matches the release version, usually with a
-   leading `v`, for example `v0.1.1`.
-4. Push the branch and tag to GitHub.
-5. Create a GitHub Release from that tag.
+```bash
+python release.py 0.1.2
+```
+
+What it does:
+
+1. Verifies the git working tree is clean.
+2. Updates the version in `custom_components/eloverblik_plus/manifest.json`.
+3. Updates the version in `pyproject.toml`.
+4. Runs `ruff check`, `ruff format --check`, and `pytest`.
+5. Creates a release commit and annotated tag like `v0.1.2`.
+
+Optional flags:
+
+- `--dry-run` shows what would happen without changing files or git state
+- `--skip-checks` skips linting and tests
+- `--push` pushes the release commit and tag to `origin`
+- `--github-release` creates the GitHub release via `gh` after pushing
 
 Example:
 
 ```bash
-git add custom_components/eloverblik_plus/manifest.json README.md hacs.json
-git commit -m "Prepare v0.1.1 release"
-git tag -a v0.1.1 -m "Release v0.1.1"
-git push origin main
-git push origin v0.1.1
+python release.py 0.1.2 --push --github-release
 ```
 
 Notes:
 
-- Keep `manifest.json` version and release tag aligned, for example
-  `0.1.1` in the manifest and `v0.1.1` as the git tag
+- Keep `manifest.json`, `pyproject.toml`, and the git tag aligned, for example
+  `0.1.2` and `v0.1.2`
 - Do not move or reuse old tags after publishing; create a new version instead
-- Use patch releases like `0.1.1` for fixes and minor releases like `0.2.0`
+- Use patch releases like `0.1.2` for fixes and minor releases like `0.2.0`
   for new features
