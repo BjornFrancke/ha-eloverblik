@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import subprocess
 import sys
@@ -38,19 +39,31 @@ def require_tag_absent(tag_name: str) -> None:
         raise SystemExit(1)
 
 
-def read_current_version() -> str:
-    manifest_content = MANIFEST_PATH.read_text()
-    manifest_match = re.search(r'"version"\s*:\s*"([^"]+)"', manifest_content)
-    if manifest_match is None:
+def read_manifest_version() -> str:
+    try:
+        manifest_data = json.loads(MANIFEST_PATH.read_text())
+    except json.JSONDecodeError as err:
+        raise SystemExit(f"Manifest is not valid JSON: {err}") from err
+
+    manifest_version = manifest_data.get("version")
+    if not isinstance(manifest_version, str):
         raise SystemExit("Could not find manifest version.")
 
+    return manifest_version
+
+
+def read_pyproject_version() -> str:
     pyproject_content = PYPROJECT_PATH.read_text()
     pyproject_match = re.search(r'^version\s*=\s*"([^"]+)"', pyproject_content, re.MULTILINE)
     if pyproject_match is None:
         raise SystemExit("Could not find pyproject version.")
 
-    manifest_version = manifest_match.group(1)
-    pyproject_version = pyproject_match.group(1)
+    return pyproject_match.group(1)
+
+
+def read_current_version() -> str:
+    manifest_version = read_manifest_version()
+    pyproject_version = read_pyproject_version()
     if manifest_version != pyproject_version:
         raise SystemExit(
             "Manifest and pyproject versions differ. Align them before releasing."
@@ -63,7 +76,7 @@ def replace_version(path: Path, pattern: str, new_version: str) -> None:
     content = path.read_text()
     updated_content, replacements = re.subn(
         pattern,
-        rf'\g<1>{new_version}\g<2>',
+        rf'\g<1>{new_version}\g<3>',
         content,
         flags=re.MULTILINE,
     )
@@ -76,7 +89,9 @@ def update_versions(version: str, *, dry_run: bool) -> None:
     if dry_run:
         return
 
-    replace_version(MANIFEST_PATH, r'("version"\s*:\s*")([^"]+)(")', version)
+    manifest_data = json.loads(MANIFEST_PATH.read_text())
+    manifest_data["version"] = version
+    MANIFEST_PATH.write_text(json.dumps(manifest_data, indent=2) + "\n")
     replace_version(PYPROJECT_PATH, r'^(version\s*=\s*")([^"]+)(")', version)
 
 
