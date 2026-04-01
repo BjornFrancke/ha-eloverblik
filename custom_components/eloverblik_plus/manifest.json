@@ -1,15 +1,20 @@
 {
   "domain": "eloverblik_plus",
   "name": "Eloverblik Plus",
-  "codeowners": ["@BjornFrancke"],
+  "codeowners": [
+    "@BjornFrancke"
+  ],
   "config_flow": true,
   "documentation": "https://github.com/BjornFrancke/ha-eloverblik-plus",
-  "dependencies": ["http", "lovelace"],
+  "dependencies": [
+    "http",
+    "lovelace"
+  ],
   "integration_type": "service",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/BjornFrancke/ha-eloverblik-plus/issues",
   "requirements": [
     "pyeloverblik @ git+https://github.com/BjornFrancke/ha-eloverblik-plus.git@67b7d1530c7daf4b7d4ac737c52af69a9bfdaf0e"
   ],
-  "version": "0.1.1"
+  "version": "0.1.2"
 }
