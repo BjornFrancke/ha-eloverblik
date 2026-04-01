@@ -9,15 +9,12 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.eloverblik_plus.api import (
-    EloverblikAuthError,
-    EloverblikConnectionError,
-)
 from custom_components.eloverblik_plus.const import (
     CONF_METERING_POINT,
     CONF_REFRESH_TOKEN,
     DOMAIN,
 )
+from pyeloverblik import EloverblikAuthError, EloverblikConnectionError
 
 from .conftest import MOCK_ACCESS_TOKEN, MOCK_METERING_POINT, MOCK_REFRESH_TOKEN
 

@@ -9,13 +9,13 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import UpdateFailed
 import pytest
 
-from custom_components.eloverblik_plus.api import (
+from custom_components.eloverblik_plus.coordinator import (
+    EloverblikDataUpdateCoordinator,
+)
+from pyeloverblik import (
     LOCAL_TIME_ZONE,
     EloverblikAuthError,
     EloverblikConnectionError,
-)
-from custom_components.eloverblik_plus.coordinator import (
-    EloverblikDataUpdateCoordinator,
 )
 
 

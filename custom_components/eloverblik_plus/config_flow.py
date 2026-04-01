@@ -15,7 +15,12 @@ from homeassistant.helpers.selector import (
 )
 import voluptuous as vol
 
-from .api import EloverblikApiClient, EloverblikAuthError, EloverblikConnectionError
+from pyeloverblik import (
+    EloverblikApiClient,
+    EloverblikAuthError,
+    EloverblikConnectionError,
+)
+
 from .const import CONF_METERING_POINT, CONF_REFRESH_TOKEN, DOMAIN, LOGGER
 
 STEP_USER_DATA_SCHEMA = vol.Schema(

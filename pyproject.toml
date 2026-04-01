@@ -1,12 +1,15 @@
 [project]
-name = "ha-eloverblik"
-version = "0.1.0"
-description = "Home Assistant custom integration for Eloverblik (Danish electricity data)"
+name = "pyeloverblik"
+version = "0.1.1"
+description = "Python client library for the Eloverblik API used by the Eloverblik Plus integration"
 requires-python = ">=3.12"
 license = "MIT"
+dependencies = [
+    "aiohttp>=3.9.0",
+]
 
 [tool.setuptools.packages.find]
-include = ["custom_components*"]
+include = ["pyeloverblik*"]
 
 [project.optional-dependencies]
 dev = [

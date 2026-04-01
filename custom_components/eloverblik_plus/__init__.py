@@ -10,7 +10,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util import dt as dt_util
 
-from .api import LOCAL_TIME_ZONE, EloverblikApiClient
+from pyeloverblik import LOCAL_TIME_ZONE, EloverblikApiClient
+
 from .const import CONF_METERING_POINT, CONF_REFRESH_TOKEN
 from .coordinator import EloverblikDataUpdateCoordinator
 from .frontend import async_setup_frontend

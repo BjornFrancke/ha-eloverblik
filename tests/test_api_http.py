@@ -8,12 +8,12 @@ from unittest.mock import MagicMock
 import aiohttp
 import pytest
 
-from custom_components.eloverblik_plus.api import (
+from pyeloverblik import (
     EloverblikApiClient,
     EloverblikAuthError,
     EloverblikConnectionError,
 )
-from custom_components.eloverblik_plus.const import (
+from pyeloverblik.client import (
     API_METER_DATA_URL,
     API_METERING_POINTS_URL,
     API_TOKEN_URL,
@@ -149,10 +149,10 @@ async def test_async_get_metering_points_success(
             "result": [
                 {
                     "meteringPointId": "571313174200318497",
-                    "streetName": "Mosevangen",
-                    "buildingNumber": "54",
-                    "postcode": "4400",
-                    "cityName": "Kalundborg",
+                    "streetName": "Eksempelvej",
+                    "buildingNumber": "2",
+                    "postcode": "2100",
+                    "cityName": "Koebenhavn O",
                 }
             ]
         },
@@ -163,7 +163,7 @@ async def test_async_get_metering_points_success(
     assert result == [
         {
             "metering_point": "571313174200318497",
-            "label": "571313174200318497 - Mosevangen 54, 4400 Kalundborg",
+            "label": "571313174200318497 - Eksempelvej 2, 2100 Koebenhavn O",
         }
     ]
     session.get.assert_called_once_with(
@@ -222,7 +222,7 @@ async def test_async_get_time_series_retries_transient_http_errors(
         sleep_calls.append(delay)
 
     monkeypatch.setattr(
-        "custom_components.eloverblik_plus.api.asyncio.sleep",
+        "pyeloverblik.client.asyncio.sleep",
         fake_sleep,
     )
 

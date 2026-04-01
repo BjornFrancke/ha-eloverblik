@@ -22,12 +22,13 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util.unit_conversion import EnergyConverter
 
-from .api import (
+from pyeloverblik import (
     LOCAL_TIME_ZONE,
     EloverblikApiClient,
     EloverblikAuthError,
     EloverblikError,
 )
+
 from .const import (
     DEFAULT_HISTORY_DAYS,
     DEFAULT_RECENT_HISTORY_DAYS,

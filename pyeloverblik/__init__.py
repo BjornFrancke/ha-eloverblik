@@ -1,6 +1,6 @@
-"""Compatibility wrapper for the extracted `pyeloverblik` library."""
+"""Python client library for the Eloverblik API."""
 
-from pyeloverblik import (
+from .client import (
     LOCAL_TIME_ZONE,
     EloverblikApiClient,
     EloverblikAuthError,

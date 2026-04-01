@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Generator
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -81,69 +80,65 @@ def mock_config_entry_data() -> dict:
 
 
 @pytest.fixture
-def mock_eloverblik_api() -> Generator[AsyncMock]:
+def mock_eloverblik_api() -> AsyncMock:
     """Mock the Eloverblik API client."""
-    with patch(
-        "custom_components.eloverblik_plus.api.EloverblikApiClient",
-        autospec=True,
-    ) as mock_client_class:
-        mock_client = mock_client_class.return_value
-        mock_client.async_get_access_token = AsyncMock(return_value=MOCK_ACCESS_TOKEN)
-        mock_client.async_get_time_series = AsyncMock(
-            return_value=MOCK_TIME_SERIES_RESPONSE
-        )
-        mock_client.async_get_latest_consumption = AsyncMock(
-            return_value={
-                "latest_hour": {
+    mock_client = AsyncMock()
+    mock_client.async_get_access_token = AsyncMock(return_value=MOCK_ACCESS_TOKEN)
+    mock_client.async_get_time_series = AsyncMock(
+        return_value=MOCK_TIME_SERIES_RESPONSE
+    )
+    mock_client.async_get_latest_consumption = AsyncMock(
+        return_value={
+            "latest_hour": {
+                "api_start_utc": "2024-01-03T00:00:00Z",
+                "api_end_utc": "2024-01-03T01:00:00Z",
+                "start": "2024-01-03T01:00:00+01:00",
+                "end": "2024-01-03T02:00:00+01:00",
+                "kwh": 0.6,
+            },
+            "latest_hour_kwh": 0.6,
+            "window_total_kwh": 2.0,
+            "hourly": [
+                {
+                    "api_start_utc": "2024-01-01T23:00:00Z",
+                    "api_end_utc": "2024-01-02T00:00:00Z",
+                    "start": "2024-01-02T00:00:00+01:00",
+                    "end": "2024-01-02T01:00:00+01:00",
+                    "kwh": 0.5,
+                },
+                {
+                    "api_start_utc": "2024-01-02T00:00:00Z",
+                    "api_end_utc": "2024-01-02T01:00:00Z",
+                    "start": "2024-01-02T01:00:00+01:00",
+                    "end": "2024-01-02T02:00:00+01:00",
+                    "kwh": 0.3,
+                },
+                {
+                    "api_start_utc": "2024-01-02T01:00:00Z",
+                    "api_end_utc": "2024-01-02T02:00:00Z",
+                    "start": "2024-01-02T02:00:00+01:00",
+                    "end": "2024-01-02T03:00:00+01:00",
+                    "kwh": 0.2,
+                },
+                {
+                    "api_start_utc": "2024-01-02T23:00:00Z",
+                    "api_end_utc": "2024-01-03T00:00:00Z",
+                    "start": "2024-01-03T00:00:00+01:00",
+                    "end": "2024-01-03T01:00:00+01:00",
+                    "kwh": 0.4,
+                },
+                {
                     "api_start_utc": "2024-01-03T00:00:00Z",
                     "api_end_utc": "2024-01-03T01:00:00Z",
                     "start": "2024-01-03T01:00:00+01:00",
                     "end": "2024-01-03T02:00:00+01:00",
                     "kwh": 0.6,
                 },
-                "latest_hour_kwh": 0.6,
-                "window_total_kwh": 2.0,
-                "hourly": [
-                    {
-                        "api_start_utc": "2024-01-01T23:00:00Z",
-                        "api_end_utc": "2024-01-02T00:00:00Z",
-                        "start": "2024-01-02T00:00:00+01:00",
-                        "end": "2024-01-02T01:00:00+01:00",
-                        "kwh": 0.5,
-                    },
-                    {
-                        "api_start_utc": "2024-01-02T00:00:00Z",
-                        "api_end_utc": "2024-01-02T01:00:00Z",
-                        "start": "2024-01-02T01:00:00+01:00",
-                        "end": "2024-01-02T02:00:00+01:00",
-                        "kwh": 0.3,
-                    },
-                    {
-                        "api_start_utc": "2024-01-02T01:00:00Z",
-                        "api_end_utc": "2024-01-02T02:00:00Z",
-                        "start": "2024-01-02T02:00:00+01:00",
-                        "end": "2024-01-02T03:00:00+01:00",
-                        "kwh": 0.2,
-                    },
-                    {
-                        "api_start_utc": "2024-01-02T23:00:00Z",
-                        "api_end_utc": "2024-01-03T00:00:00Z",
-                        "start": "2024-01-03T00:00:00+01:00",
-                        "end": "2024-01-03T01:00:00+01:00",
-                        "kwh": 0.4,
-                    },
-                    {
-                        "api_start_utc": "2024-01-03T00:00:00Z",
-                        "api_end_utc": "2024-01-03T01:00:00Z",
-                        "start": "2024-01-03T01:00:00+01:00",
-                        "end": "2024-01-03T02:00:00+01:00",
-                        "kwh": 0.6,
-                    },
-                ],
-                "daily": {
-                    "2024-01-02": 1.0,
-                    "2024-01-03": 1.0,
-                },
-            }
-        )
-        yield mock_client
+            ],
+            "daily": {
+                "2024-01-02": 1.0,
+                "2024-01-03": 1.0,
+            },
+        }
+    )
+    return mock_client
