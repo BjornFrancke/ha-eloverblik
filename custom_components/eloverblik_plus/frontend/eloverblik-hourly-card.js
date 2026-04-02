@@ -585,17 +585,21 @@ class EloverblikHourlyCard extends HTMLElement {
       return [];
     }
 
+    const sortedComparisonPoints = [...this._comparisonData].sort(
+      (left, right) => left.alignedStartMs - right.alignedStartMs,
+    );
     const comparisonByAlignedStart = new Map();
-    for (const point of this._comparisonData) {
-      comparisonByAlignedStart.set(point.alignedStartMs, point);
-    }
 
     const aligned = points
       .map((point) => {
-        const comparisonPoint = comparisonByAlignedStart.get(point.apiStartMs);
+        const comparisonPoint = this._findNearestComparisonPoint(
+          sortedComparisonPoints,
+          point.apiStartMs,
+        );
         if (!comparisonPoint) {
           return null;
         }
+        comparisonByAlignedStart.set(point.apiStartMs, comparisonPoint);
         return {
           apiStartMs: point.apiStartMs,
           kwh: comparisonPoint.kwh,
@@ -605,6 +609,52 @@ class EloverblikHourlyCard extends HTMLElement {
 
     this._comparisonByAlignedStart = comparisonByAlignedStart;
     return aligned;
+  }
+
+  _findNearestComparisonPoint(
+    comparisonPoints,
+    targetMs,
+    maxDiffMs = 90 * 60 * 1000,
+  ) {
+    if (!comparisonPoints.length) {
+      return null;
+    }
+
+    let left = 0;
+    let right = comparisonPoints.length - 1;
+    while (left <= right) {
+      const middle = Math.floor((left + right) / 2);
+      const value = comparisonPoints[middle].alignedStartMs;
+      if (value < targetMs) {
+        left = middle + 1;
+      } else {
+        right = middle - 1;
+      }
+    }
+
+    const candidates = [];
+    if (left < comparisonPoints.length) {
+      candidates.push(comparisonPoints[left]);
+    }
+    if (left - 1 >= 0) {
+      candidates.push(comparisonPoints[left - 1]);
+    }
+
+    let bestPoint = null;
+    let bestDiff = Number.POSITIVE_INFINITY;
+    for (const candidate of candidates) {
+      const diff = Math.abs(candidate.alignedStartMs - targetMs);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        bestPoint = candidate;
+      }
+    }
+
+    if (bestDiff > maxDiffMs) {
+      return null;
+    }
+
+    return bestPoint;
   }
 
   _maybeUpdateComparison(stateObj, points) {
@@ -780,8 +830,13 @@ class EloverblikHourlyCard extends HTMLElement {
   }
 
   _parseDate(value) {
-    if (!value) {
+    if (value === null || value === undefined || value === "") {
       return Number.NaN;
+    }
+
+    if (typeof value === "number" && Number.isFinite(value)) {
+      // Recorder can return unix timestamps as seconds or milliseconds.
+      return value > 1e12 ? value : value * 1000;
     }
 
     const parsed = Date.parse(value);
