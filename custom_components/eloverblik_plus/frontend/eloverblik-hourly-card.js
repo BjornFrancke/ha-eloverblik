@@ -204,11 +204,12 @@ class EloverblikHourlyCard extends HTMLElement {
 
         .plot-line-comparison {
           fill: none;
-          stroke: var(--secondary-text-color);
+          stroke: var(--warning-color, var(--secondary-text-color));
           stroke-dasharray: 6 4;
           stroke-linecap: round;
           stroke-linejoin: round;
-          stroke-width: 2;
+          stroke-width: 2.5;
+          opacity: 0.95;
         }
 
         .plot-area-comparison {
@@ -401,9 +402,9 @@ class EloverblikHourlyCard extends HTMLElement {
         ${yAxis}
         ${xAxis}
         ${comparisonAreaPath ? `<path class="plot-area-comparison" d="${comparisonAreaPath}"></path>` : ""}
-        ${comparisonLinePath ? `<path class="plot-line-comparison" d="${comparisonLinePath}"></path>` : ""}
         <path class="plot-area" d="${areaPath}"></path>
         <path class="plot-line" d="${linePath}"></path>
+        ${comparisonLinePath ? `<path class="plot-line-comparison" d="${comparisonLinePath}"></path>` : ""}
         ${pointsHtml}
       </svg>
     `;
