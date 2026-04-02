@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -13,7 +14,6 @@ from homeassistant.components.recorder.models import (
 )
 from homeassistant.components.recorder.statistics import (
     async_add_external_statistics,
-    clear_statistics,
     get_last_statistics,
 )
 from homeassistant.config_entries import ConfigEntry
@@ -147,6 +147,24 @@ class EloverblikDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         return statistics
 
+    async def _async_clear_hourly_statistics(self) -> None:
+        """Clear imported hourly statistics on the recorder thread."""
+        try:
+            recorder = get_instance(self.hass)
+        except KeyError:
+            return
+
+        done = asyncio.get_running_loop().create_future()
+
+        def _on_done() -> None:
+            self.hass.loop.call_soon_threadsafe(done.set_result, None)
+
+        recorder.async_clear_statistics(
+            [self._get_statistic_id()],
+            on_done=_on_done,
+        )
+        await done
+
     async def _async_import_hourly_statistics(
         self,
         data: dict[str, Any],
@@ -193,26 +211,18 @@ class EloverblikDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def async_backfill_history(self, days: int) -> None:
         """Rebuild imported hourly statistics for a larger history window."""
         try:
-            recorder = get_instance(self.hass)
-        except KeyError:
-            recorder = None
-
-        try:
             start_date, end_date = self._get_backfill_window(days)
             data = await self.client.async_get_latest_consumption(
                 start_date=start_date,
                 end_date=end_date,
             )
 
-            if recorder is not None:
-                await recorder.async_add_executor_job(
-                    clear_statistics, recorder, [self._get_statistic_id()]
+            await self._async_clear_hourly_statistics()
+            statistics = self._build_hourly_statistics(data)
+            if statistics:
+                async_add_external_statistics(
+                    self.hass, self._build_statistics_metadata(), statistics
                 )
-                statistics = self._build_hourly_statistics(data)
-                if statistics:
-                    async_add_external_statistics(
-                        self.hass, self._build_statistics_metadata(), statistics
-                    )
 
             await self.async_refresh()
         except EloverblikAuthError as err:

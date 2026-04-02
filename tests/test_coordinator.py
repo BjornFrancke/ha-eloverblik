@@ -377,7 +377,9 @@ async def test_manual_backfill_rebuilds_statistics_for_requested_window(hass) ->
         "daily": {"2024-01-02": 0.8},
     }
     recorder = Mock()
-    recorder.async_add_executor_job = AsyncMock()
+    recorder.async_clear_statistics = Mock(
+        side_effect=lambda statistic_ids, on_done=None: on_done and on_done()
+    )
     coordinator = EloverblikDataUpdateCoordinator(hass, client)
 
     with (
@@ -390,9 +392,6 @@ async def test_manual_backfill_rebuilds_statistics_for_requested_window(hass) ->
             return_value=recorder,
         ),
         patch(
-            "custom_components.eloverblik_plus.coordinator.clear_statistics"
-        ) as mock_clear_statistics,
-        patch(
             "custom_components.eloverblik_plus.coordinator.async_add_external_statistics"
         ) as mock_add_external_statistics,
         patch.object(coordinator, "async_refresh", AsyncMock()) as mock_async_refresh,
@@ -403,11 +402,11 @@ async def test_manual_backfill_rebuilds_statistics_for_requested_window(hass) ->
         start_date="2026-03-01",
         end_date="2026-04-01",
     )
-    recorder.async_add_executor_job.assert_awaited_once_with(
-        mock_clear_statistics,
-        recorder,
+    recorder.async_clear_statistics.assert_called_once()
+    assert recorder.async_clear_statistics.call_args.args == (
         ["eloverblik_plus:999999999999999999_hourly_consumption"],
     )
+    assert "on_done" in recorder.async_clear_statistics.call_args.kwargs
     mock_add_external_statistics.assert_called_once()
     _, metadata, statistics = mock_add_external_statistics.call_args.args
     assert (
