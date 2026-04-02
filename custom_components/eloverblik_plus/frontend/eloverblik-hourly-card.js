@@ -9,6 +9,7 @@ class EloverblikHourlyCard extends HTMLElement {
       entity: suggestedEntity || "",
       title: "Eloverblik Hourly API Data",
       hours_to_show: 24,
+      show_comparison: true,
     };
   }
 
@@ -19,6 +20,10 @@ class EloverblikHourlyCard extends HTMLElement {
     this._hass = undefined;
     this._hoveredPoint = null;
     this._selectedHoursToShow = null;
+    this._comparisonData = [];
+    this._comparisonByAlignedStart = new Map();
+    this._comparisonFetchKey = null;
+    this._comparisonRequestId = 0;
   }
 
   setConfig(config) {
@@ -28,6 +33,7 @@ class EloverblikHourlyCard extends HTMLElement {
 
     this._config = {
       hours_to_show: 24,
+      show_comparison: true,
       ...config,
     };
     this._selectedHoursToShow = Number(this._config.hours_to_show) || 24;
@@ -65,6 +71,7 @@ class EloverblikHourlyCard extends HTMLElement {
       Number.isFinite(hoursToShow) && hoursToShow > 0
         ? allPoints.slice(-hoursToShow)
         : allPoints;
+    this._maybeUpdateComparison(stateObj, points);
 
     if (!points.length) {
       this.shadowRoot.innerHTML = this._buildFrame(
@@ -74,7 +81,8 @@ class EloverblikHourlyCard extends HTMLElement {
       return;
     }
 
-    const chart = this._buildChart(points);
+    const comparisonPoints = this._buildComparisonPoints(points);
+    const chart = this._buildChart(points, comparisonPoints);
     const latestPoint = points[points.length - 1];
     const tooltipHtml = this._buildTooltip(points);
     const hoursOptions = this._buildHoursOptions(allPoints.length);
@@ -194,6 +202,19 @@ class EloverblikHourlyCard extends HTMLElement {
           fill: color-mix(in srgb, var(--primary-color) 18%, transparent);
         }
 
+        .plot-line-comparison {
+          fill: none;
+          stroke: var(--secondary-text-color);
+          stroke-dasharray: 6 4;
+          stroke-linecap: round;
+          stroke-linejoin: round;
+          stroke-width: 2;
+        }
+
+        .plot-area-comparison {
+          fill: color-mix(in srgb, var(--secondary-text-color) 8%, transparent);
+        }
+
         .point {
           cursor: pointer;
           fill: var(--card-background-color);
@@ -203,6 +224,16 @@ class EloverblikHourlyCard extends HTMLElement {
 
         .point.active {
           fill: var(--primary-color);
+        }
+
+        .point-comparison {
+          fill: var(--card-background-color);
+          stroke: var(--secondary-text-color);
+          stroke-width: 1.5;
+        }
+
+        .point-comparison.active {
+          fill: var(--secondary-text-color);
         }
 
         .hitbox {
@@ -245,6 +276,12 @@ class EloverblikHourlyCard extends HTMLElement {
         .tooltip-label {
           color: var(--secondary-text-color);
         }
+
+        .tooltip-row-comparison {
+          border-top: 1px solid var(--divider-color);
+          margin-top: 8px;
+          padding-top: 8px;
+        }
       </style>
       <ha-card header="${this._escapeHtml(title)}">
         <div class="card-content">
@@ -254,7 +291,7 @@ class EloverblikHourlyCard extends HTMLElement {
     `;
   }
 
-  _buildChart(points) {
+  _buildChart(points, comparisonPoints = []) {
     const width = 720;
     const height = 280;
     const padding = { top: 18, right: 18, bottom: 34, left: 52 };
@@ -263,8 +300,12 @@ class EloverblikHourlyCard extends HTMLElement {
 
     const minX = points[0].apiStartMs;
     const maxX = points[points.length - 1].apiStartMs;
-    const rawMinY = Math.min(...points.map((point) => point.kwh));
-    const rawMaxY = Math.max(...points.map((point) => point.kwh));
+    const allYValues = [
+      ...points.map((point) => point.kwh),
+      ...comparisonPoints.map((point) => point.kwh),
+    ];
+    const rawMinY = Math.min(...allYValues);
+    const rawMaxY = Math.max(...allYValues);
     const minY = 0;
     const maxY = rawMaxY === rawMinY ? rawMaxY + 1 : rawMaxY * 1.1;
 
@@ -280,9 +321,15 @@ class EloverblikHourlyCard extends HTMLElement {
       return padding.top + plotHeight - ((value - minY) / range) * plotHeight;
     };
 
-    const pathPoints = points.map((point) => `${mapX(point.apiStartMs)},${mapY(point.kwh)}`);
     const linePath = this._buildLinePath(points, mapX, mapY);
     const areaPath = this._buildAreaPath(points, mapX, mapY, padding.top + plotHeight);
+    const comparisonLinePath = this._buildLinePath(comparisonPoints, mapX, mapY);
+    const comparisonAreaPath = this._buildAreaPath(
+      comparisonPoints,
+      mapX,
+      mapY,
+      padding.top + plotHeight,
+    );
     const xTickIndexes = this._buildTickIndexes(points.length, 4);
     const yTicks = this._buildYTicks(minY, maxY, 4);
 
@@ -316,6 +363,7 @@ class EloverblikHourlyCard extends HTMLElement {
         const x = mapX(point.apiStartMs);
         const y = mapY(point.kwh);
         const isActive = this._hoveredPoint?.index === index;
+        const comparisonPoint = this._comparisonByAlignedStart.get(point.apiStartMs);
         return `
           <rect
             class="hitbox"
@@ -332,6 +380,18 @@ class EloverblikHourlyCard extends HTMLElement {
             cy="${y}"
             r="${isActive ? 5 : 4}"
           ></circle>
+          ${
+            comparisonPoint
+              ? `
+                <circle
+                  class="point-comparison${isActive ? " active" : ""}"
+                  cx="${x}"
+                  cy="${mapY(comparisonPoint.kwh)}"
+                  r="${isActive ? 4 : 3}"
+                ></circle>
+              `
+              : ""
+          }
         `;
       })
       .join("");
@@ -340,6 +400,8 @@ class EloverblikHourlyCard extends HTMLElement {
       <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Hourly Eloverblik consumption">
         ${yAxis}
         ${xAxis}
+        ${comparisonAreaPath ? `<path class="plot-area-comparison" d="${comparisonAreaPath}"></path>` : ""}
+        ${comparisonLinePath ? `<path class="plot-line-comparison" d="${comparisonLinePath}"></path>` : ""}
         <path class="plot-area" d="${areaPath}"></path>
         <path class="plot-line" d="${linePath}"></path>
         ${pointsHtml}
@@ -357,6 +419,7 @@ class EloverblikHourlyCard extends HTMLElement {
       return '<div class="tooltip" style="--tooltip-opacity: 0;"></div>';
     }
 
+    const comparisonPoint = this._comparisonByAlignedStart.get(point.apiStartMs);
     return `
       <div
         class="tooltip"
@@ -371,6 +434,16 @@ class EloverblikHourlyCard extends HTMLElement {
           <span class="tooltip-label">Local end</span>
           <span>${this._escapeHtml(this._formatLocalDateTime(point.localEndMs, point.apiEndMs))}</span>
         </div>
+        ${
+          comparisonPoint
+            ? `
+              <div class="tooltip-row tooltip-row-comparison">
+                <span class="tooltip-label">Last year</span>
+                <span>${this._escapeHtml(this._formatKwh(comparisonPoint.kwh))}</span>
+              </div>
+            `
+            : ""
+        }
       </div>
     `;
   }
@@ -501,6 +574,128 @@ class EloverblikHourlyCard extends HTMLElement {
     return Array.from({ length: count + 1 }, (_, index) => min + index * step);
   }
 
+  _buildComparisonPoints(points) {
+    if (!Array.isArray(points) || !points.length) {
+      this._comparisonByAlignedStart = new Map();
+      return [];
+    }
+
+    if (!this._config?.show_comparison || !Array.isArray(this._comparisonData)) {
+      this._comparisonByAlignedStart = new Map();
+      return [];
+    }
+
+    const comparisonByAlignedStart = new Map();
+    for (const point of this._comparisonData) {
+      comparisonByAlignedStart.set(point.alignedStartMs, point);
+    }
+
+    const aligned = points
+      .map((point) => {
+        const comparisonPoint = comparisonByAlignedStart.get(point.apiStartMs);
+        if (!comparisonPoint) {
+          return null;
+        }
+        return {
+          apiStartMs: point.apiStartMs,
+          kwh: comparisonPoint.kwh,
+        };
+      })
+      .filter(Boolean);
+
+    this._comparisonByAlignedStart = comparisonByAlignedStart;
+    return aligned;
+  }
+
+  _maybeUpdateComparison(stateObj, points) {
+    if (!this._config?.show_comparison || !this._hass || !stateObj) {
+      this._comparisonData = [];
+      this._comparisonByAlignedStart = new Map();
+      this._comparisonFetchKey = null;
+      return;
+    }
+
+    const meteringPoint = stateObj.attributes?.metering_point;
+    if (!meteringPoint || !Array.isArray(points) || !points.length) {
+      this._comparisonData = [];
+      this._comparisonByAlignedStart = new Map();
+      this._comparisonFetchKey = null;
+      return;
+    }
+
+    const startMs = points[0].apiStartMs;
+    const endMs = points[points.length - 1].apiEndMs;
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) {
+      return;
+    }
+
+    const prevYearStartMs = this._shiftYear(startMs, -1);
+    const prevYearEndMs = this._shiftYear(endMs, -1);
+    const statisticId = `eloverblik_plus:${meteringPoint}_hourly_consumption`;
+    const fetchKey = [
+      statisticId,
+      prevYearStartMs,
+      prevYearEndMs,
+      this._selectedHoursToShow ?? "all",
+    ].join("|");
+    if (fetchKey === this._comparisonFetchKey) {
+      return;
+    }
+
+    this._comparisonFetchKey = fetchKey;
+    const requestId = ++this._comparisonRequestId;
+
+    this._hass
+      .callWS({
+        type: "recorder/statistics_during_period",
+        start_time: new Date(prevYearStartMs).toISOString(),
+        end_time: new Date(prevYearEndMs).toISOString(),
+        statistic_ids: [statisticId],
+        period: "hour",
+        types: ["state"],
+      })
+      .then((response) => {
+        if (requestId !== this._comparisonRequestId) {
+          return;
+        }
+
+        const rows = response?.[statisticId] || [];
+        this._comparisonData = rows
+          .map((row) => {
+            const apiStartMs = this._parseDate(row.start);
+            const kwh = Number(row.state);
+            if (!Number.isFinite(apiStartMs) || !Number.isFinite(kwh)) {
+              return null;
+            }
+            return {
+              apiStartMs,
+              alignedStartMs: this._shiftYear(apiStartMs, 1),
+              kwh,
+            };
+          })
+          .filter(Boolean)
+          .sort((left, right) => left.apiStartMs - right.apiStartMs);
+        this._comparisonByAlignedStart = new Map(
+          this._comparisonData.map((point) => [point.alignedStartMs, point]),
+        );
+        this._render();
+      })
+      .catch(() => {
+        if (requestId !== this._comparisonRequestId) {
+          return;
+        }
+        this._comparisonData = [];
+        this._comparisonByAlignedStart = new Map();
+        this._render();
+      });
+  }
+
+  _shiftYear(timestampMs, deltaYears) {
+    const shifted = new Date(timestampMs);
+    shifted.setUTCFullYear(shifted.getUTCFullYear() + deltaYears);
+    return shifted.getTime();
+  }
+
   _buildHoursOptions(totalPoints) {
     const presets = [6, 12, 24, 48, 72, 168].filter(
       (value) => value < totalPoints,
@@ -594,6 +789,7 @@ class EloverblikHourlyCardEditor extends HTMLElement {
       entity: "",
       title: "Eloverblik Hourly API Data",
       hours_to_show: 24,
+      show_comparison: true,
     };
     this._hass = undefined;
   }
@@ -603,6 +799,7 @@ class EloverblikHourlyCardEditor extends HTMLElement {
       entity: "",
       title: "Eloverblik Hourly API Data",
       hours_to_show: 24,
+      show_comparison: true,
       ...config,
     };
     this._render();
@@ -662,6 +859,20 @@ class EloverblikHourlyCardEditor extends HTMLElement {
           font: inherit;
           padding: 10px 12px;
         }
+
+        .toggle-row {
+          align-items: center;
+          display: flex;
+          gap: 10px;
+        }
+
+        .toggle-row input[type="checkbox"] {
+          accent-color: var(--primary-color);
+          border-radius: 4px;
+          height: 18px;
+          margin: 0;
+          width: 18px;
+        }
       </style>
       <div class="form">
         <label>
@@ -703,6 +914,15 @@ class EloverblikHourlyCardEditor extends HTMLElement {
           />
           <span class="hint">Defaults to the latest 24 hourly points.</span>
         </label>
+
+        <label class="toggle-row" for="show_comparison">
+          <input
+            id="show_comparison"
+            type="checkbox"
+            ${this._config.show_comparison !== false ? "checked" : ""}
+          />
+          Show comparison with same period last year
+        </label>
       </div>
     `;
 
@@ -721,6 +941,11 @@ class EloverblikHourlyCardEditor extends HTMLElement {
           "hours_to_show",
           Number.isFinite(parsed) && parsed > 0 ? parsed : 24,
         );
+      });
+    this.shadowRoot
+      .getElementById("show_comparison")
+      ?.addEventListener("change", (event) => {
+        this._updateConfig("show_comparison", Boolean(event.target.checked));
       });
   }
 
